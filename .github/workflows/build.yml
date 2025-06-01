@@ -105,17 +105,18 @@ jobs:
           git tag autoversion-${{ github.sha }}
           git push origin autoversion-${{ github.sha }}
 
-      - name: Create GitHub Release
+      - name: Create GitHub Release (skip if exists)
         if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
         continue-on-error: true
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: autoversion-${{ github.sha }}
-          name: "Automated Release from main - ${{ github.sha }}"
+          name: "Auto Release - ${{ github.sha }}"
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
       - name: Upload release assets
         if: github.ref == 'refs/heads/main'
@@ -125,3 +126,4 @@ jobs:
           files: _build/output/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
