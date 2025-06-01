@@ -105,8 +105,19 @@ jobs:
           git tag autoversion-${{ github.sha }}
           git push origin autoversion-${{ github.sha }}
 
+      - name: Check if release exists
+        id: check_release
+        run: |
+          if gh release view autoversion-${{ github.sha }} --repo ${{ github.repository }}; then
+            echo "release_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "release_exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create GitHub Release (skip if exists)
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && steps.check_release.outputs.release_exists == 'false'
         continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
