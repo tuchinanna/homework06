@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-24.04, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout repository
@@ -101,19 +101,19 @@ jobs:
 
     steps:
       - name: Download Linux artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
-          name: ubuntu-24.04-package
+          name: ubuntu-latest-package
           path: ./artifacts/ubuntu
 
       - name: Download Windows artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: windows-latest-package
           path: ./artifacts/windows
 
       - name: Download macOS artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: macos-latest-package
           path: ./artifacts/macos
