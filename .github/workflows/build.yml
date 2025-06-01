@@ -41,3 +41,30 @@ jobs:
   
       - name: Build
         run: cmake --build _build
+
+      - name: Run tests
+        working-directory: build
+        run: ctest --output-on-failure
+  
+      - name: Package
+        working-directory: build
+        run: |
+          cpack || echo "No package created"
+  
+      - name: Rename artifacts
+        working-directory: build
+        run: |
+          mkdir -p output
+          if ls *.deb 1>/dev/null 2>&1; then mv *.deb output/solver.deb; fi
+          if ls *.rpm 1>/dev/null 2>&1; then mv *.rpm output/solver.rpm; fi
+          if ls *.msi 1>/dev/null 2>&1; then mv *.msi output/solver.msi; fi
+          if ls *.exe 1>/dev/null 2>&1; then mv *.exe output/solver-setup.exe; fi
+          if ls *.dmg 1>/dev/null 2>&1; then mv *.dmg output/solver.dmg; fi
+  
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-package
+          path: build/output/*
+          if-no-files-found: warn
+          retention-days: 5
