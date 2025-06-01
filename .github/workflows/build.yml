@@ -101,19 +101,19 @@ jobs:
 
     steps:
       - name: Download Linux artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v2
         with:
           name: ubuntu-24.04-package
           path: ./artifacts/ubuntu
 
       - name: Download Windows artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v2
         with:
           name: windows-latest-package
           path: ./artifacts/windows
 
       - name: Download macOS artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v2
         with:
           name: macos-latest-package
           path: ./artifacts/macos
