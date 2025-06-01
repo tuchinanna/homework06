@@ -18,17 +18,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-  
+
       - name: Set up dependencies (Linux)
         if: matrix.os == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake g++ libgtest-dev rpm dpkg-dev
-  
+
       - name: Set up dependencies (Windows)
         if: matrix.os == 'windows-latest'
         run: choco install cmake nsis wixtoolset -y
-  
+
       - name: Set up dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
@@ -53,7 +53,6 @@ jobs:
             </dict>
             </plist>' > Info.plist
           fi
-          
           if [ ! -f "icon.icns" ]; then
             mkdir -p tmp.iconset
             sips -z 16 16 -s format png /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericDocumentIcon.icns --out tmp.iconset/icon_16x16.png || true
@@ -61,25 +60,24 @@ jobs:
             iconutil -c icns tmp.iconset -o icon.icns || touch icon.icns
             rm -rf tmp.iconset
           fi
-  
+
       - name: Set up CMake
         uses: jwlawson/actions-setup-cmake@v1
-  
-      - name: Create build directory
+
+      - name: Configure CMake
         run: cmake -S . -B _build -DCMAKE_INSTALL_PREFIX=_install
-  
+
       - name: Build
         run: cmake --build _build --config Release
 
       - name: Run tests
         working-directory: _build
         run: ctest --output-on-failure
-  
-      - name: Package
+
+      - name: Package (Release)
         working-directory: _build
-        run: |
-          cpack -C Release || echo "No package created"
-  
+        run: cpack -C Release || echo "No package created"
+
       - name: Rename artifacts
         working-directory: _build
         shell: bash
@@ -90,7 +88,7 @@ jobs:
           if ls *.msi 1>/dev/null 2>&1; then mv *.msi output/solver.msi; fi
           if ls *.exe 1>/dev/null 2>&1; then mv *.exe output/solver-setup.exe; fi
           if ls *.dmg 1>/dev/null 2>&1; then mv *.dmg output/solver.dmg; fi
-  
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -98,3 +96,22 @@ jobs:
           path: _build/output/*
           if-no-files-found: warn
           retention-days: 5
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: autoversion-${{ github.sha }}
+          name: "Automated Release from main - ${{ github.sha }}"
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release assets
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: _build/output/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
