@@ -19,6 +19,7 @@ if(UNIX AND NOT APPLE)
     set(CPACK_RPM_PACKAGE_RELEASE 1)
     set(CPACK_RPM_PACKAGE_REQUIRES "libstdc++")
     set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+    
     install(TARGETS solver hello_world
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
             COMPONENT applications)
