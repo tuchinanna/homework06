@@ -43,16 +43,16 @@ jobs:
         run: cmake --build _build
 
       - name: Run tests
-        working-directory: build
+        working-directory: _build
         run: ctest --output-on-failure
   
       - name: Package
-        working-directory: build
+        working-directory: _build
         run: |
           cpack || echo "No package created"
   
       - name: Rename artifacts
-        working-directory: build
+        working-directory: _build
         run: |
           mkdir -p output
           if ls *.deb 1>/dev/null 2>&1; then mv *.deb output/solver.deb; fi
@@ -65,6 +65,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-package
-          path: build/output/*
+          path: _build/output/*
           if-no-files-found: warn
           retention-days: 5
