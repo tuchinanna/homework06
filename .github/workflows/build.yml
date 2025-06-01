@@ -69,7 +69,7 @@ jobs:
         run: cmake -S . -B _build -DCMAKE_INSTALL_PREFIX=_install
   
       - name: Build
-        run: cmake --build _build
+        run: cmake --build _build --config Release
 
       - name: Run tests
         working-directory: _build
@@ -78,7 +78,7 @@ jobs:
       - name: Package
         working-directory: _build
         run: |
-          cpack || echo "No package created"
+          cpack -C Release || echo "No package created"
   
       - name: Rename artifacts
         working-directory: _build
