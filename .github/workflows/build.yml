@@ -108,6 +108,7 @@ jobs:
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
+        continue-on-error: true
         with:
           tag_name: autoversion-${{ github.sha }}
           name: "Automated Release from main - ${{ github.sha }}"
