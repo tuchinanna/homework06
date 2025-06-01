@@ -1,154 +1,229 @@
-name: CMake Build and Release
+name: Build and Package
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-
+  linux-build:
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++ libgtest-dev rpm dpkg-dev
+        
+    - name: Build GTest
+      run: |
+        cd /usr/src/googletest/googletest || cd /usr/src/gtest
+        sudo cmake CMakeLists.txt
+        sudo make
+        sudo cp lib/*.a /usr/lib/
+        
+    - name: Configure CMake
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      
+    - name: Build
+      run: cmake --build build --config Release --parallel 2
+      
+    - name: Run tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest --output-on-failure
+      
+    - name: Create packages
+      working-directory: ${{github.workspace}}/build
+      run: |
+        cpack -G DEB && mv *.deb solver.deb
+        cpack -G RPM && mv *.rpm solver.rpm
+        ls -la *.deb *.rpm || echo "No packages created"
+      
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-packages
+        path: |
+          build/solver.deb
+          build/solver.rpm
+        if-no-files-found: error
+        retention-days: 5
 
-      - name: Set up dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake g++ libgtest-dev rpm dpkg-dev
+  windows-build:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+      
+    - name: Install dependencies
+      run: choco install cmake nsis wixtoolset -y
+    
+    - name: Configure CMake
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      
+    - name: Build
+      run: cmake --build build --config Release --parallel 2
+      
+    - name: Run tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest --output-on-failure
+      
+    - name: Create package
+      working-directory: ${{github.workspace}}/build
+      run: |
+        cpack -G NSIS && mv *.exe solver-setup.exe
+        cpack -G WIX && mv *.msi solver.msi
+        Get-ChildItem *.exe,*.msi | Format-List || Write-Output "No packages created"
+      
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-package
+        path: |
+          build/solver-setup.exe
+          build/solver.msi
+        if-no-files-found: error
+        retention-days: 5
 
-      - name: Set up dependencies (Windows)
-        if: matrix.os == 'windows-latest'
-        run: choco install cmake nsis wixtoolset -y
+  macos-build:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Create required files
+      run: |
+        if [ ! -f "Info.plist" ]; then
+          echo '<?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>solver_app</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.yourcompany.solver</string>
+              <key>CFBundleName</key>
+              <string>Solver</string>
+              <key>CFBundleVersion</key>
+              <string>1.0.0</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>10.15</string>
+          </dict>
+          </plist>' > Info.plist
+        fi
+        
+        if [ ! -f "icon.icns" ]; then
+          mkdir -p tmp.iconset
+          sips -z 16 16 -s format png /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericDocumentIcon.icns --out tmp.iconset/icon_16x16.png || true
+          sips -z 32 32 -s format png /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericDocumentIcon.icns --out tmp.iconset/icon_16x16@2x.png || true
+          iconutil -c icns tmp.iconset -o icon.icns || touch icon.icns
+          rm -rf tmp.iconset
+        fi
+    
+    - name: Install dependencies
+      run: |
+        brew install cmake googletest
+        [ -d "/opt/homebrew/include/gtest" ] && cd /opt/homebrew/include/gtest || cd /usr/local/include/gtest || true
+        [ -f "CMakeLists.txt" ] && sudo cmake CMakeLists.txt && sudo make && sudo cp *.a /usr/local/lib/ || true
+    
+    - name: Configure CMake
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    
+    - name: Build
+      run: cmake --build build --config Release --parallel 2
+    
+    - name: Run tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest --output-on-failure
+    
+    - name: Create package
+      working-directory: ${{github.workspace}}/build
+      run: |
+        cpack -G Bundle
+        ls -la *.dmg || echo "No package created"
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-package
+        path: build/*.dmg
+        if-no-files-found: error
+        retention-days: 5
 
-      - name: Set up dependencies (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew install cmake googletest
-          if [ ! -f "Info.plist" ]; then
-            echo '<?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-                <key>CFBundleExecutable</key>
-                <string>solver_app</string>
-                <key>CFBundleIdentifier</key>
-                <string>com.yourcompany.solver</string>
-                <key>CFBundleName</key>
-                <string>Solver</string>
-                <key>CFBundleVersion</key>
-                <string>1.0.0</string>
-                <key>CFBundleShortVersionString</key>
-                <string>1.0</string>
-                <key>LSMinimumSystemVersion</key>
-                <string>10.15</string>
-            </dict>
-            </plist>' > Info.plist
-          fi
-          if [ ! -f "icon.icns" ]; then
-            mkdir -p tmp.iconset
-            sips -z 16 16 -s format png /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericDocumentIcon.icns --out tmp.iconset/icon_16x16.png || true
-            sips -z 32 32 -s format png /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericDocumentIcon.icns --out tmp.iconset/icon_16x16@2x.png || true
-            iconutil -c icns tmp.iconset -o icon.icns || touch icon.icns
-            rm -rf tmp.iconset
-          fi
-
-      - name: Set up CMake
-        uses: jwlawson/actions-setup-cmake@v1
-
-      - name: Configure CMake
-        run: cmake -S . -B _build -DCMAKE_INSTALL_PREFIX=_install
-
-      - name: Build
-        run: cmake --build _build --config Release
-
-      - name: Run tests
-        working-directory: _build
-        run: ctest --output-on-failure
-
-      - name: Package (Release)
-        working-directory: _build
-        run: cpack -C Release || echo "No package created"
-
-      - name: Rename artifacts
-        working-directory: _build
-        shell: bash
-        run: |
-          mkdir -p output
-          if ls *.deb 1>/dev/null 2>&1; then mv *.deb output/solver.deb; fi
-          if ls *.rpm 1>/dev/null 2>&1; then mv *.rpm output/solver.rpm; fi
-          if ls *.msi 1>/dev/null 2>&1; then mv *.msi output/solver.msi; fi
-          if ls *.exe 1>/dev/null 2>&1; then mv *.exe output/solver-setup.exe; fi
-          if ls *.dmg 1>/dev/null 2>&1; then mv *.dmg output/solver.dmg; fi
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }}-package
-          path: _build/output/*
-
-  release:
+  source-archives:
     runs-on: ubuntu-latest
-    needs: build
-
     steps:
-      - name: Download Linux artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: ubuntu-latest-package
-          path: ./artifacts/ubuntu
+    - uses: actions/checkout@v4
+    
+    - name: Prepare source archives
+      run: |
+        git archive --format=zip -o source.zip HEAD
+        git archive --format=tar.gz -o source.tar.gz HEAD
+    
+    - name: Upload source archives
+      uses: actions/upload-artifact@v4
+      with:
+        name: source-archives
+        path: |
+          source.zip
+          source.tar.gz
+        retention-days: 5
 
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: windows-latest-package
-          path: ./artifacts/windows
-
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: macos-latest-package
-          path: ./artifacts/macos
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: autoversion-${{ github.sha }}
-          name: "Release ${{ github.sha }}"
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Linux assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: autoversion-${{ github.sha }}
-          files: ./artifacts/ubuntu/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Windows assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: autoversion-${{ github.sha }}
-          files: ./artifacts/windows/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload macOS assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: autoversion-${{ github.sha }}
-          files: ./artifacts/macos/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  create-release:
+    needs: [linux-build, windows-build, macos-build, source-archives]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download Linux artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: linux-packages
+        path: artifacts/linux
+    
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-package
+        path: artifacts/windows
+    
+    - name: Download macOS artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: macos-package
+        path: artifacts/macos
+    
+    - name: Download source archives
+      uses: actions/download-artifact@v4
+      with:
+        name: source-archives
+        path: artifacts/source
+    
+    - name: Verify artifacts
+      run: |
+        echo "Linux artifacts:"
+        ls -la artifacts/linux || echo "No Linux artifacts"
+        echo "Windows artifacts:"
+        ls -la artifacts/windows || echo "No Windows artifacts"
+        echo "macOS artifacts:"
+        ls -la artifacts/macos || echo "No macOS artifacts"
+        echo "Source archives:"
+        ls -la artifacts/source || echo "No source archives"
+    
+    - name: Create Release
+      if: success()
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ github.run_number }}
+        name: Release v${{ github.run_number }}
+        files: |
+          artifacts/linux/*
+          artifacts/windows/*
+          artifacts/macos/*
+          artifacts/source/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GH_PAT }}
