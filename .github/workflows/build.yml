@@ -1,4 +1,4 @@
-name: CMake Build
+name: CMake Build and Release
 
 on:
   push:
@@ -89,52 +89,66 @@ jobs:
           if ls *.exe 1>/dev/null 2>&1; then mv *.exe output/solver-setup.exe; fi
           if ls *.dmg 1>/dev/null 2>&1; then mv *.dmg output/solver.dmg; fi
 
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-package
           path: _build/output/*
-          if-no-files-found: warn
-          retention-days: 5
 
-      - name: Create tag for release
-        if: github.ref == 'refs/heads/main'
-        run: |
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-          git tag autoversion-${{ github.sha }}
-          git push origin autoversion-${{ github.sha }}
+  release:
+    runs-on: ubuntu-latest
+    needs: build
 
-      - name: Check if release exists
-        id: check_release
-        run: |
-          if gh release view autoversion-${{ github.sha }} --repo ${{ github.repository }}; then
-            echo "release_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "release_exists=false" >> $GITHUB_OUTPUT
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: ubuntu-24.04-package
+          path: ./artifacts/ubuntu
 
-      - name: Create GitHub Release (skip if exists)
-        if: github.ref == 'refs/heads/main' && steps.check_release.outputs.release_exists == 'false'
-        continue-on-error: true
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: windows-latest-package
+          path: ./artifacts/windows
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: macos-latest-package
+          path: ./artifacts/macos
+
+      - name: Create GitHub Release
+        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: autoversion-${{ github.sha }}
-          name: "Auto Release - ${{ github.sha }}"
+          name: "Release ${{ github.sha }}"
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-
-      - name: Upload release assets
-        if: github.ref == 'refs/heads/main'
+      - name: Upload Linux assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: autoversion-${{ github.sha }}
-          files: _build/output/*
+          files: ./artifacts/ubuntu/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload Windows assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: autoversion-${{ github.sha }}
+          files: ./artifacts/windows/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload macOS assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: autoversion-${{ github.sha }}
+          files: ./artifacts/macos/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
